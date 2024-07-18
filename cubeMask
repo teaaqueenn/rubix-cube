@@ -1,0 +1,107 @@
+import cv2
+import numpy as np
+from imutils import contours
+
+# Read the image
+image = cv2.imread('1.png')
+original = image.copy()  # Make a copy of the original image for later use
+image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)  # Convert the image to HSV color space
+mask = np.zeros(image.shape, dtype=np.uint8)  # Create an empty mask for storing color masks
+
+# Define color ranges for different colored squares in HSV
+colors = {
+    'B': [(np.array([0, 50, 50]), np.array([5, 255, 255])),
+          (np.array([170, 50, 50]), np.array([179, 255, 255]))], # red
+    'F': (np.array([5, 150, 150]), np.array([15, 255, 255])), # orange
+    'D': (np.array([20, 100, 100]), np.array([30, 255, 255])), # yellow
+    'R': (np.array([35, 50, 50]), np.array([90, 255, 255])), # green
+    'L': (np.array([90, 50, 50]), np.array([130, 255, 255])), # blue
+    'U': (np.array([0, 0, 200]), np.array([179, 30, 255])) # white
+}
+
+# Define kernel sizes for morphological operations
+openKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7,7))
+closeKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
+
+# Apply color thresholding and morphological operations to find squares of each color
+for key, ranges in colors.items():
+    if key == 'B':  # Special handling for red ranges
+        for (lower, upper) in ranges:
+            lower = np.array(lower, dtype=np.uint8)
+            upper = np.array(upper, dtype=np.uint8)
+            colorMask = cv2.inRange(image_hsv, lower, upper)
+            colorMask = cv2.morphologyEx(colorMask, cv2.MORPH_OPEN, openKernel, iterations=1)
+            colorMask = cv2.morphologyEx(colorMask, cv2.MORPH_CLOSE, closeKernel, iterations=5)
+            mask = cv2.bitwise_or(mask, cv2.merge([colorMask, colorMask, colorMask]))
+    else:
+        lower, upper = ranges
+        lower = np.array(lower, dtype=np.uint8)
+        upper = np.array(upper, dtype=np.uint8)
+        colorMask = cv2.inRange(image_hsv, lower, upper)
+        colorMask = cv2.morphologyEx(colorMask, cv2.MORPH_OPEN, openKernel, iterations=1)
+        colorMask = cv2.morphologyEx(colorMask, cv2.MORPH_CLOSE, closeKernel, iterations=5)
+        mask = cv2.bitwise_or(mask, cv2.merge([colorMask, colorMask, colorMask]))
+
+
+# Convert mask to grayscale for contour detection
+gray = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+
+# Find contours in the grayscale image
+cnts = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+
+# Sort contours from top-to-bottom
+(cnts, _) = contours.sort_contours(cnts, method="top-to-bottom")
+
+# Group contours into rows of 3 and sort each row from left-to-right
+cubeRows = []
+row = []
+for (i, c) in enumerate(cnts, 1):
+    row.append(c)
+    if i % 3 == 0:  
+        (cnts, _) = contours.sort_contours(row, method="left-to-right")
+        cubeRows.append(cnts)
+        row = []
+
+# Store detected colors in a list based on their order
+detectedColors = []
+
+for row in cubeRows:
+    for c in row:
+        x, y, w, h = cv2.boundingRect(c)
+
+        # Determine the color of the square
+        detectedColor = None
+        for key, (lower, upper) in colors.items():
+            lower = np.array(lower, dtype=np.uint8)
+            upper = np.array(upper, dtype=np.uint8)
+            maskColor = cv2.inRange(image_hsv[y:y+h, x:x+w], lower, upper)
+            if cv2.countNonZero(maskColor) > 0:
+                detectedColor = key
+                break
+
+        if detectedColor:
+            detectedColors.append(detectedColor)
+
+# Convert the list of colors into a string
+colorString = ''.join(detectedColors)
+print("Color sequence:", colorString)
+
+# Draw bounding boxes and add labels on the original image
+number = 0
+for row in cubeRows:
+    for c in row:
+        x, y, w, h = cv2.boundingRect(c)
+        cv2.rectangle(original, (x, y), (x + w, y + h), (36, 255, 12), 2)  # Draw rectangle around the square
+
+        # Add text label with color information
+        cv2.putText(original, f"{detectedColors[number].upper()} Square", (x, y - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(original, f"# {number + 1}", (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        number += 1
+
+# Display and save the resulting images
+cv2.imshow('mask', mask)  # Show the mask image
+cv2.imwrite('mask.png', mask)  # Save the mask image
+cv2.imshow('original', original)  # Show the original image with bounding boxes and labels
+cv2.imwrite('originalWithLabels.png', original)  # Save the annotated image
+cv2.waitKey()  # Wait for any key press before closing windows
