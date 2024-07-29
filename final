@@ -1,0 +1,268 @@
+import cv2
+import numpy as np
+import kociemba
+import requests
+from io import BytesIO
+import serial
+import time
+from imutils import contours
+
+# Constants and API Key for Remove.bg
+api_key = 'jUFyLY5tqtbHNiKkJxyuNioM'
+api_url = 'https://api.remove.bg/v1.0/removebg'
+
+# Define the serial port and parameters
+port = 'COM3'  # Change this to your serial port (e.g., '/dev/ttyUSB0' on Linux)
+baud_rate = 9600
+timeout = 1  # Timeout in seconds
+
+ser = serial.Serial(port, baud_rate, timeout=timeout)
+
+
+# Function to capture image using OpenCV from camera
+def capture_image():
+    cap = cv2.VideoCapture(0)  # Open default camera (0)
+
+    if not cap.isOpened():
+        print("Error: Could not open camera.")
+        return
+
+    print("Press any key to capture an image...")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Error: Failed to capture image from camera.")
+            break
+
+        cv2.imshow('Camera', frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord(' '):  # Capture image when space key is pressed
+            cv2.imwrite('captured_image.png', frame)
+            print("Image captured.")
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    return 'captured_image.png'
+
+
+
+# Function to remove background using Remove.bg API
+def remove_background(image_path):
+    image_file = open(image_path, 'rb')
+    try:
+        response = requests.post(
+            api_url,
+            files={'image_file': image_file},
+            data={'size': 'auto'},  # 'auto' size keeps the original resolution
+            headers={'X-Api-Key': api_key},
+        )
+
+        if response.status_code == requests.codes.ok:
+            return response.content
+        else:
+            print(f'Error: {response.status_code}, {response.content}')
+            return None
+    finally:
+        image_file.close()
+
+def detect_colors_and_solve(image_path):
+
+    image = cv2.imread(image_path)
+    original = image.copy()  # Make a copy of the original image for later use
+    image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)  # Convert the image to HSV color space
+    mask = np.zeros(image.shape, dtype=np.uint8)  # Create an empty mask for storing color masks
+
+    # Define color ranges for different colored squares in HSV
+    colors = {
+        'B': [(np.array([0, 50, 50]), np.array([5, 255, 255])),
+            (np.array([170, 50, 50]), np.array([179, 255, 255]))], # red
+        'F': (np.array([5, 150, 150]), np.array([15, 255, 255])), # orange
+        'D': (np.array([20, 100, 100]), np.array([30, 255, 255])), # yellow
+        'R': (np.array([35, 50, 50]), np.array([90, 255, 255])), # green
+        'L': (np.array([90, 50, 50]), np.array([130, 255, 255])), # blue
+        'U': (np.array([0, 0, 200]), np.array([179, 30, 255])) # white
+    }
+
+    # Define kernel sizes for morphological operations
+    openKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7,7))
+    closeKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
+
+    # Apply color thresholding and morphological operations to find squares of each color
+    for key, ranges in colors.items():
+        if key == 'B':  # Special handling for red ranges
+            for (lower, upper) in ranges:
+                lower = np.array(lower, dtype=np.uint8)
+                upper = np.array(upper, dtype=np.uint8)
+                colorMask = cv2.inRange(image_hsv, lower, upper)
+                colorMask = cv2.morphologyEx(colorMask, cv2.MORPH_OPEN, openKernel, iterations=1)
+                colorMask = cv2.morphologyEx(colorMask, cv2.MORPH_CLOSE, closeKernel, iterations=5)
+                mask = cv2.bitwise_or(mask, cv2.merge([colorMask, colorMask, colorMask]))
+        else:
+            lower, upper = ranges
+            lower = np.array(lower, dtype=np.uint8)
+            upper = np.array(upper, dtype=np.uint8)
+            colorMask = cv2.inRange(image_hsv, lower, upper)
+            colorMask = cv2.morphologyEx(colorMask, cv2.MORPH_OPEN, openKernel, iterations=1)
+            colorMask = cv2.morphologyEx(colorMask, cv2.MORPH_CLOSE, closeKernel, iterations=5)
+            mask = cv2.bitwise_or(mask, cv2.merge([colorMask, colorMask, colorMask]))
+
+
+    # Convert mask to grayscale for contour detection
+    gray = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+
+    # Find contours in the grayscale image
+    cnts = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+
+    # Sort contours from top-to-bottom
+    (cnts, _) = contours.sort_contours(cnts, method="top-to-bottom")
+
+    # Group contours into rows of 3 and sort each row from left-to-right
+    cubeRows = []
+    row = []
+    for (i, c) in enumerate(cnts, 1):
+        row.append(c)
+        if i % 3 == 0:   
+            (cnts, _) = contours.sort_contours(row, method="left-to-right")
+            cubeRows.append(cnts)
+            row = []
+
+    # Store detected colors in a list based on their order
+    detectedColors = []
+
+    for row in cubeRows:
+        for c in row:
+            x, y, w, h = cv2.boundingRect(c)
+
+            # Determine the color of the square
+            detectedColor = None
+            for key, ranges in colors.items():
+                if key == 'B':  # Special handling for red ranges
+                    for (lower, upper) in ranges:
+                        lower = np.array(lower, dtype=np.uint8)
+                        upper = np.array(upper, dtype=np.uint8)
+                        roi_hsv = image_hsv[y:y+h, x:x+w]
+                        maskColor = cv2.inRange(roi_hsv, lower, upper)
+                        if cv2.countNonZero(maskColor) > 0:
+                            detectedColor = key
+                            break
+                else:
+                    lower, upper = ranges
+                    lower = np.array(lower, dtype=np.uint8)
+                    upper = np.array(upper, dtype=np.uint8)
+                    roi_hsv = image_hsv[y:y+h, x:x+w]
+                    maskColor = cv2.inRange(roi_hsv, lower, upper)
+                    if cv2.countNonZero(maskColor) > 0:
+                        detectedColor = key
+                        break
+
+            if detectedColor:
+                detectedColors.append(detectedColor)
+
+
+
+    # Convert the list of colors into a string
+    colorString = ''.join(detectedColors)
+    print("Color sequence:", colorString)
+
+    # Draw bounding boxes and add labels on the original image
+    number = 0
+    for row in cubeRows:
+        for c in row:
+            x, y, w, h = cv2.boundingRect(c)
+            cv2.rectangle(original, (x, y), (x + w, y + h), (36, 255, 12), 2)  # Draw rectangle around the square
+
+            # Add text label with color information
+            cv2.putText(original, f"{detectedColors[number].upper()} Square", (x, y - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.putText(original, f"# {number + 1}", (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            number += 1
+
+    # Display and save the resulting images
+    cv2.imshow('mask', mask)  # Show the mask image
+    cv2.imwrite('mask.png', mask)  # Save the mask image
+    cv2.imshow('original', original)  # Show the original image with bounding boxes and labels
+    cv2.imwrite('originalWithLabels.png', original)  # Save the annotated image
+    cv2.waitKey()  # Wait for any key press before closing windows
+        
+    '''
+    white = U 
+    blue = L 
+    orange = F 
+    green = R 
+    red = B 
+    yellow = D
+    '''
+
+    #Variables + Functions
+    max_steps = 50
+
+    def turn_motor(move):
+        print(f"Turning motor for move: {move}")
+
+    solution = kociemba.solve(colorString)
+
+    steps = solution.split(" ")
+
+    for step in steps:
+        match step:
+            case 'U':
+                turn_motor('U')
+            case 'U2':
+                turn_motor('U2')
+            case 'U\'':
+                turn_motor('U\'')
+            case 'D':
+                turn_motor('D')
+            case 'D2':
+                turn_motor('D2')
+            case 'D\'':
+                turn_motor('D\'')
+            case 'L':
+                turn_motor('L')
+            case 'L2':
+                turn_motor('L2')
+            case 'L\'':
+                turn_motor('L\'')
+            case 'R':
+                turn_motor('R')
+            case 'R2':
+                turn_motor('R2')
+            case 'R\'':
+                turn_motor('R\'')
+            case 'F':
+                turn_motor('F')
+            case 'F2':
+                turn_motor('F2')
+            case 'F\'':
+                turn_motor('F\'')
+            case 'B':
+                turn_motor('B')
+            case 'B2':
+                turn_motor('B2')
+            case 'B\'':
+                turn_motor('B\'')
+            case _:
+                print(f"Unknown move type: {step}")
+
+def main():
+    capture_image()
+    # Assuming the captured image is saved as 'captured_image.png'
+    image_path = 'captured_image.png'
+
+    # Remove background and get processed image
+    processed_image = remove_background(image_path)
+
+    if processed_image:
+        # Save the processed image
+        with open('processed_image.png', 'wb') as out_file:
+            out_file.write(processed_image)
+
+        # Detect cube colors and solve
+        detect_colors_and_solve('processed_image.png')
+
+if __name__ == "__main__":
+    main()
+

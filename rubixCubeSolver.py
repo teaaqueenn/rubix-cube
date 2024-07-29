@@ -10,7 +10,7 @@ yellow = D
 '''
 
 #Variables + Functions
-max_steps = 20
+max_steps = 50
 
 def turn_motor(move):
     print(f"Turning motor for move: {move}")

@@ -3,7 +3,7 @@ import numpy as np
 from imutils import contours
 
 # Read the image
-image = cv2.imread('1.png')
+image = cv2.imread(r"C:\Users\Grace\Documents\GitHub\rubix-cube\BBL.png")
 original = image.copy()  # Make a copy of the original image for later use
 image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)  # Convert the image to HSV color space
 mask = np.zeros(image.shape, dtype=np.uint8)  # Create an empty mask for storing color masks
@@ -72,16 +72,30 @@ for row in cubeRows:
 
         # Determine the color of the square
         detectedColor = None
-        for key, (lower, upper) in colors.items():
-            lower = np.array(lower, dtype=np.uint8)
-            upper = np.array(upper, dtype=np.uint8)
-            maskColor = cv2.inRange(image_hsv[y:y+h, x:x+w], lower, upper)
-            if cv2.countNonZero(maskColor) > 0:
-                detectedColor = key
-                break
+        for key, ranges in colors.items():
+            if key == 'B':  # Special handling for red ranges
+                for (lower, upper) in ranges:
+                    lower = np.array(lower, dtype=np.uint8)
+                    upper = np.array(upper, dtype=np.uint8)
+                    roi_hsv = image_hsv[y:y+h, x:x+w]
+                    maskColor = cv2.inRange(roi_hsv, lower, upper)
+                    if cv2.countNonZero(maskColor) > 0:
+                        detectedColor = key
+                        break
+            else:
+                lower, upper = ranges
+                lower = np.array(lower, dtype=np.uint8)
+                upper = np.array(upper, dtype=np.uint8)
+                roi_hsv = image_hsv[y:y+h, x:x+w]
+                maskColor = cv2.inRange(roi_hsv, lower, upper)
+                if cv2.countNonZero(maskColor) > 0:
+                    detectedColor = key
+                    break
 
         if detectedColor:
             detectedColors.append(detectedColor)
+
+
 
 # Convert the list of colors into a string
 colorString = ''.join(detectedColors)
