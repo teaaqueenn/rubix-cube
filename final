@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 import kociemba
 import requests
-from io import BytesIO
 import serial
 import time
 from imutils import contours
@@ -16,18 +15,28 @@ port = 'COM3'  # Change this to your serial port (e.g., '/dev/ttyUSB0' on Linux)
 baud_rate = 9600
 timeout = 1  # Timeout in seconds
 
-ser = serial.Serial(port, baud_rate, timeout=timeout)
+# Open the serial port
+#ser = serial.Serial(port, baud_rate, timeout=timeout)
 
+'''
+def send_command(command):
+    """Send a command to the Arduino."""
+    if ser.is_open:
+        ser.write(command.encode())  # Encode string command to bytes and send
+        print(f"Sent command: {command}")
+    else:
+        print("Serial port is not open.")
+'''
 
-# Function to capture image using OpenCV from camera
 def capture_image():
+    """Capture an image using the default camera."""
     cap = cv2.VideoCapture(0)  # Open default camera (0)
 
     if not cap.isOpened():
         print("Error: Could not open camera.")
         return
 
-    print("Press any key to capture an image...")
+    print("Press space to capture an image...")
 
     while True:
         ret, frame = cap.read()
@@ -48,9 +57,8 @@ def capture_image():
     return 'captured_image.png'
 
 
-
-# Function to remove background using Remove.bg API
 def remove_background(image_path):
+    """Remove background using the Remove.bg API."""
     image_file = open(image_path, 'rb')
     try:
         response = requests.post(
@@ -68,8 +76,12 @@ def remove_background(image_path):
     finally:
         image_file.close()
 
-def detect_colors_and_solve(image_path):
+def turn_motor(move):
+            print(f"Turning motor for move: {move}")
 
+
+def detect_colors_and_solve(image_path):
+    """Detect colors in the image, solve the cube, and control motors."""
     image = cv2.imread(image_path)
     original = image.copy()  # Make a copy of the original image for later use
     image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)  # Convert the image to HSV color space
@@ -78,16 +90,16 @@ def detect_colors_and_solve(image_path):
     # Define color ranges for different colored squares in HSV
     colors = {
         'B': [(np.array([0, 50, 50]), np.array([5, 255, 255])),
-            (np.array([170, 50, 50]), np.array([179, 255, 255]))], # red
-        'F': (np.array([5, 150, 150]), np.array([15, 255, 255])), # orange
-        'D': (np.array([20, 100, 100]), np.array([30, 255, 255])), # yellow
-        'R': (np.array([35, 50, 50]), np.array([90, 255, 255])), # green
-        'L': (np.array([90, 50, 50]), np.array([130, 255, 255])), # blue
-        'U': (np.array([0, 0, 200]), np.array([179, 30, 255])) # white
+            (np.array([170, 50, 50]), np.array([179, 255, 255]))],  # red
+        'F': (np.array([5, 150, 150]), np.array([15, 255, 255])),  # orange
+        'D': (np.array([20, 100, 100]), np.array([30, 255, 255])),  # yellow
+        'R': (np.array([35, 50, 50]), np.array([90, 255, 255])),  # green
+        'L': (np.array([90, 50, 50]), np.array([130, 255, 255])),  # blue
+        'U': (np.array([0, 0, 200]), np.array([179, 30, 255]))  # white
     }
 
     # Define kernel sizes for morphological operations
-    openKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7,7))
+    openKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
     closeKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
 
     # Apply color thresholding and morphological operations to find squares of each color
@@ -162,8 +174,6 @@ def detect_colors_and_solve(image_path):
             if detectedColor:
                 detectedColors.append(detectedColor)
 
-
-
     # Convert the list of colors into a string
     colorString = ''.join(detectedColors)
     print("Color sequence:", colorString)
@@ -186,24 +196,9 @@ def detect_colors_and_solve(image_path):
     cv2.imshow('original', original)  # Show the original image with bounding boxes and labels
     cv2.imwrite('originalWithLabels.png', original)  # Save the annotated image
     cv2.waitKey()  # Wait for any key press before closing windows
-        
-    '''
-    white = U 
-    blue = L 
-    orange = F 
-    green = R 
-    red = B 
-    yellow = D
-    '''
 
-    #Variables + Functions
-    max_steps = 50
-
-    def turn_motor(move):
-        print(f"Turning motor for move: {move}")
-
+    # Solve the cube
     solution = kociemba.solve(colorString)
-
     steps = solution.split(" ")
 
     for step in steps:
@@ -247,6 +242,51 @@ def detect_colors_and_solve(image_path):
             case _:
                 print(f"Unknown move type: {step}")
 
+    '''
+    for step in steps:
+        match step:
+            case 'U':
+                send_command('A')  # Send command to turn top (up line) clockwise 
+            case 'U2':
+                send_command('B')  # Send command to turn top (up line) 180 degrees
+            case 'U\'':
+                send_command('C')  # Send command to turn top (up line) counter-clockwise 
+            case 'D':
+                send_command('D')  # Send command to turn bottom (down line) clockwise 
+            case 'D2':
+                send_command('E')  # Send command to turn bottom (down line) 180 degrees 
+            case 'D\'':
+                send_command('F')  # Send command to turn bottom (down line) counter-clockwise 
+            case 'L':
+                send_command('G')  # Send command to turn left side clockwise 
+            case 'L2':
+                send_command('H')  # Send command to turn left side 180 degrees
+            case 'L\'':
+                send_command('I')  # Send command to turn left side counter-clockwise
+            case 'R':
+                send_command('J')  # Send command to turn right side clockwise
+            case 'R2':
+                send_command('K')  # Send command to turn right side 180 degrees
+            case 'R\'':
+                send_command('L')  # Send command to turn right side counter-clockwise
+            case 'F':
+                send_command('M')  # Send command to turn front side clockwise
+            case 'F2':
+                send_command('N')  # Send command to turn front side 180 degrees
+            case 'F\'':
+                send_command('O')  # Send command to turn front side counter-clockwise
+            case 'B':
+                send_command('P')  # Send command to turn back side clockwise
+            case 'B2':
+                send_command('Q')  # Send command to turn back side 180 degrees
+            case 'B\'':
+                send_command('R')  # Send command to turn back side counter-clockwise
+            case _:
+                print(f"Unknown move type: {step}")
+                '''
+
+
+
 def main():
     capture_image()
     # Assuming the captured image is saved as 'captured_image.png'
@@ -263,6 +303,13 @@ def main():
         # Detect cube colors and solve
         detect_colors_and_solve('processed_image.png')
 
+
 if __name__ == "__main__":
     main()
 
+'''
+# Close the serial port after finishing
+if ser.is_open:
+    ser.close()
+    print("Serial port closed.")
+'''
