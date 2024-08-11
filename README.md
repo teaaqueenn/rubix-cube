@@ -40,4 +40,4 @@ With the color detection process complete, the next step involved serial communi
 
 Final Thoughts
 
-While the project faced some challenges, such as dealing with multiple computers and integrating various components, these obstacles are part of the learning experience. The process of solving a Rubik’s Cube with technology showcases the innovative potential of combining programming, robotics, and computer vision.
+While the project faced some challenges, such as dealing with multiple computers and integrating various components, these obstacles are part of the learning experience. In the end it was pretty fun. I still have not connected it to the actual motors yet.
