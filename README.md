@@ -38,6 +38,6 @@ Serial Communication and Motor Control
 
 With the color detection process complete, the next step involved serial communication with an Arduino to control the motors. The setup includes defining the serial port, baud rate, and timeout. The Arduino program, written to control six servos, listens for commands and moves the servos accordingly. Each command adjusts the angle of the servos to manipulate the Rubik’s Cube.
 
-Final Thoughts
+**Final Thoughts**
 
 While the project faced some challenges, such as dealing with multiple computers and integrating various components, these obstacles are part of the learning experience. In the end it was pretty fun. I still have not connected it to the actual motors yet.
