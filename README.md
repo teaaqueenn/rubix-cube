@@ -29,12 +29,12 @@ Once the necessary tools were in place, I began programming. The library in ques
 
 To facilitate the robot’s task, I used computer vision. This involved several steps:
 
-Library Imports: Importing essential libraries such as cv2 (OpenCV), numpy, and imutils.
-Image Processing: Loading and processing the image to isolate colors and detect contours.
-Color Detection: Defining color ranges and creating masks to identify different colors on the cube.
-Contour Analysis: Sorting and grouping contours to determine the cube's color pattern.
-Background Removal: Using the Remove.bg API to eliminate background interference from the image.
-Serial Communication and Motor Control
+-Library Imports: Importing essential libraries such as cv2 (OpenCV), numpy, and imutils.
+-Image Processing: Loading and processing the image to isolate colors and detect contours.
+-Color Detection: Defining color ranges and creating masks to identify different colors on the cube.
+-Contour Analysis: Sorting and grouping contours to determine the cube's color pattern.
+-Background Removal: Using the Remove.bg API to eliminate background interference from the image.
+-Serial Communication and Motor Control
 
 With the color detection process complete, the next step involved serial communication with an Arduino to control the motors. The setup includes defining the serial port, baud rate, and timeout. The Arduino program, written to control six servos, listens for commands and moves the servos accordingly. Each command adjusts the angle of the servos to manipulate the Rubik’s Cube.
 
