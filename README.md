@@ -1,3 +1,4 @@
 # rubix-cube
 
-This is basically a fun project I worked on in order to work on computer vision.
+This is a fun side project I worked on for a week during the summer of 2024 in order to develop my programming skills.
+
